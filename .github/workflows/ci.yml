@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate project and app plist
+        run: plutil -lint BuildNumberTest.xcodeproj/project.pbxproj BuildNumberTest/BuildNumberTest-Info.plist
+      - name: Build unsigned Debug target without archive or version hooks
+        run: |
+          xcodebuild -version
+          xcodebuild \
+            -project BuildNumberTest.xcodeproj \
+            -target BuildNumberTest \
+            -configuration Debug \
+            -sdk macosx \
+            ARCHS="$(uname -m)" \
+            MACOSX_DEPLOYMENT_TARGET=11.0 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            SYMROOT="$RUNNER_TEMP/build-number-ci/products" \
+            OBJROOT="$RUNNER_TEMP/build-number-ci/objects" \
+            build
+      - name: Verify build did not change version or source files
+        run: git diff --exit-code
